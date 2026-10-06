@@ -8,45 +8,65 @@
  *
  * Subagents run headlessly with no UI to confirm against, so a dangerous
  * command from a subagent is blocked outright rather than prompted — same
- * rule pi's own permission-gate example applies.
+ * rule the hosts' own permission-gate example applies.
  *
  * Publishes state changes over pi.events ("bash-guard:changed") for
- * my-powerline-footer to render the 🛡️ shield flag (green on, red off) next
- * to the frugal flag.
+ * the power-footer extensions to render the 🛡️ shield flag (green on, red
+ * off) next to the frugal flag.
  */
 
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { Container, Key, matchesKey, Spacer, Text, truncateToWidth, visibleWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
+// Shared by omp and pi. Types come from omp's package (erased at runtime); the TUI helpers
+// are imported from the host's own pi-tui when the confirm overlay opens.
+import type { ExtensionAPI, ExtensionContext } from "@oh-my-pi/pi-coding-agent";
+
+/** Both hosts' pi-tui builds export these names with identical runtime behavior — only
+ *  their classes are distinct types, so the loaded module is cast to this structural shape. */
+interface TuiHelpers {
+	Container: new () => { addChild(child: unknown): void; render(width: number): string[]; invalidate(): void };
+	Spacer: new (lines: number) => unknown;
+	Text: new (text: string, padLeft?: number, padRight?: number) => { setText(text: string): void; render(width: number): string[] };
+	Key: { enter: string; escape: string } & Record<string, unknown>;
+	matchesKey(data: string, key: string): boolean;
+	truncateToWidth(text: string, maxWidth: number, ellipsis: string, pad?: boolean): string;
+	visibleWidth(text: string): number;
+	wrapTextWithAnsi(text: string, maxWidth: number): string[];
+}
+
+let K: TuiHelpers;
+
+/** omp's ExtensionAPI has a `logger`; pi's does not. */
+const isOmp = (pi: ExtensionAPI) => "logger" in pi;
 
 interface BashGuardState {
 	enabled: boolean;
 }
 
+/** omp's Theme always has getThinkingBorderColor; pi's does not. */
 interface MinimalTheme {
+	getThinkingBorderColor?(level: string): (text: string) => string;
 	fg(color: string, text: string): string;
 	bold(text: string): string;
 }
 
-function createBashGuardConfirmComponent(command: string, label: string) {
+function createBashGuardConfirmComponent(command: string, label: string, border: (s: string) => string) {
 	return (
 		tui: { requestRender(): void },
 		theme: MinimalTheme,
 		_kb: unknown,
 		done: (result: "allow" | "deny") => void,
 	) => {
-		const container = new Container();
-		const redBorder = (s: string) => theme.fg("error", s);
+		const container = new K.Container();
 
-		container.addChild(new Text(theme.fg("error", theme.bold("Dangerous Command Detected")), 1, 0));
-		container.addChild(new Spacer(1));
-		container.addChild(new Text(theme.fg("warning", `This command contains ${label}:`), 1, 0));
-		container.addChild(new Spacer(1));
-		const commandText = new Text("", 1, 0);
+		container.addChild(new K.Text(theme.fg("error", theme.bold("Dangerous Command Detected")), 1, 0));
+		container.addChild(new K.Spacer(1));
+		container.addChild(new K.Text(theme.fg("warning", `This command contains ${label}:`), 1, 0));
+		container.addChild(new K.Spacer(1));
+		const commandText = new K.Text("", 1, 0);
 		container.addChild(commandText);
-		container.addChild(new Spacer(1));
-		container.addChild(new Text(theme.fg("text", "Allow execution?"), 1, 0));
-		container.addChild(new Spacer(1));
-		container.addChild(new Text(theme.fg("dim", "y/enter: allow • n/esc: deny"), 1, 0));
+		container.addChild(new K.Spacer(1));
+		container.addChild(new K.Text(theme.fg("text", "Allow execution?"), 1, 0));
+		container.addChild(new K.Spacer(1));
+		container.addChild(new K.Text(theme.fg("dim", "y/enter: allow • n/esc: deny"), 1, 0));
 
 		return {
 			render: (width: number) => {
@@ -54,21 +74,21 @@ function createBashGuardConfirmComponent(command: string, label: string) {
 				// frame. Render one here so the modal has visible side borders and
 				// consistent horizontal/vertical breathing room.
 				const innerWidth = Math.max(1, width - 4);
-				commandText.setText(wrapTextWithAnsi(theme.fg("text", command), Math.max(1, innerWidth - 2)).join("\n"));
+				commandText.setText(K.wrapTextWithAnsi(theme.fg("text", command), Math.max(1, innerWidth - 2)).join("\n"));
 				const wrap = (line: string) => {
-					const content = truncateToWidth(line, innerWidth, "");
-					const pad = " ".repeat(Math.max(0, innerWidth - visibleWidth(content)));
-					return `${redBorder("│")} ${content}${pad} ${redBorder("│")}`;
+					const content = K.truncateToWidth(line, innerWidth, "");
+					const pad = " ".repeat(Math.max(0, innerWidth - K.visibleWidth(content)));
+					return `${border("│")} ${content}${pad} ${border("│")}`;
 				};
-				const top = redBorder(`┌${"─".repeat(Math.max(1, width - 2))}┐`);
-				const bottom = redBorder(`└${"─".repeat(Math.max(1, width - 2))}┘`);
+				const top = border(`┌${"─".repeat(Math.max(1, width - 2))}┐`);
+				const bottom = border(`└${"─".repeat(Math.max(1, width - 2))}┘`);
 				return [top, wrap(""), ...container.render(innerWidth).map(wrap), wrap(""), bottom];
 			},
 			invalidate: () => container.invalidate(),
 			handleInput: (data: string) => {
-				if (matchesKey(data, Key.enter) || data === "y" || data === "Y") {
+				if (K.matchesKey(data, K.Key.enter) || data === "y" || data === "Y") {
 					done("allow");
-				} else if (matchesKey(data, Key.escape) || data === "n" || data === "N") {
+				} else if (K.matchesKey(data, K.Key.escape) || data === "n" || data === "N") {
 					done("deny");
 				}
 				tui.requestRender();
@@ -117,7 +137,7 @@ export default function bashGuardExtension(pi: ExtensionAPI): void {
 		},
 	});
 
-	pi.on("tool_call", async (event, ctx) => {
+	pi.on("tool_call", async (event, ctx: ExtensionContext) => {
 		if (!enabled) return undefined;
 		if (event.toolName !== "bash") return undefined;
 
@@ -134,17 +154,29 @@ export default function bashGuardExtension(pi: ExtensionAPI): void {
 		// The Herdr state bridge turns this into a blocked/red agent state and
 		// raises Herdr's normal attention notification for a blocked pane.
 		pi.events.emit("herdr:blocked", { active: true, label: `Bash guard: ${match}` });
+
+		if (!K) {
+			const host_tui = await (isOmp(pi) ? import("@oh-my-pi/pi-tui") : import("@earendil-works/pi-tui"));
+			K = host_tui as unknown as TuiHelpers;
+		}
+		const theme = ctx.ui.theme as unknown as MinimalTheme;
+		const border = isOmp(pi)
+			? theme.getThinkingBorderColor!(pi.getThinkingLevel() ?? "off")
+			: (s: string) => theme.fg("error", s);
 		let choice: "allow" | "deny";
 		try {
-			choice = await ctx.ui.custom(createBashGuardConfirmComponent(command, match), {
-				overlay: true,
-				overlayOptions: {
-					anchor: "center",
-					width: "70%",
-					maxHeight: "70%",
-					margin: 2,
+			choice = await ctx.ui.custom(
+				createBashGuardConfirmComponent(command, match, border),
+				{
+					overlay: true,
+					overlayOptions: {
+						anchor: "center",
+						width: "70%",
+						maxHeight: "70%",
+						margin: 2,
+					},
 				},
-			});
+			);
 		} finally {
 			pi.events.emit("herdr:blocked", { active: false });
 		}
