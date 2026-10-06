@@ -1,1 +1,49 @@
-{"name":"@alvaroak/pi-omp-bash-guard","version":"0.3.0","description":"Confirmation gate for destructive bash commands (runs on both omp and pi)","license":"MIT","keywords":["omp-package","omp-extension","pi-package","pi-extension","security","bash"],"files":["index.ts","README.md","LICENSE"],"peerDependencies":{"@earendil-works/pi-coding-agent":"*","@earendil-works/pi-tui":"*","@oh-my-pi/pi-coding-agent":"*","@oh-my-pi/pi-tui":"*"},"pi":{"extensions":["./index.ts"]},"omp":{"extensions":["./index.ts"]}}
+{
+  "name": "@alvaroak/pi-omp-bash-guard",
+  "version": "0.3.1",
+  "description": "Confirmation gate for destructive bash commands (runs on both omp and pi)",
+  "license": "MIT",
+  "keywords": [
+    "omp-package",
+    "omp-extension",
+    "pi-package",
+    "pi-extension",
+    "security",
+    "bash"
+  ],
+  "files": [
+    "index.ts",
+    "README.md",
+    "LICENSE"
+  ],
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-tui": "*",
+    "@oh-my-pi/pi-coding-agent": "*",
+    "@oh-my-pi/pi-tui": "*"
+  },
+  "pi": {
+    "extensions": [
+      "./index.ts"
+    ]
+  },
+  "omp": {
+    "extensions": [
+      "./index.ts"
+    ]
+  },
+  "peerDependenciesMeta": {
+    "@earendil-works/pi-coding-agent": {
+      "optional": true
+    },
+    "@earendil-works/pi-tui": {
+      "optional": true
+    },
+    "@oh-my-pi/pi-coding-agent": {
+      "optional": true
+    },
+    "@oh-my-pi/pi-tui": {
+      "optional": true
+    }
+  }
+}
